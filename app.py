@@ -83,28 +83,34 @@ def _compute_recipe(payload: OptimizationRequest) -> dict[str, float]:
 async_engine: Optional[AsyncEngine] = None
 
 
+async def initialize_engine() -> AsyncEngine:
+    global async_engine
+    if async_engine is None:
+        async_engine = create_async_engine(
+            "sqlite+aiosqlite:///./materials.db",
+            echo=False,
+            future=True,
+        )
+        async with async_engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+    return async_engine
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global async_engine
-    async_engine = create_async_engine(
-        "sqlite+aiosqlite:///./materials.db",
-        echo=False,
-        future=True,
-    )
-    async with async_engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+    await initialize_engine()
     yield
     if async_engine is not None:
         await async_engine.dispose()
+        async_engine = None
 
 
 app = FastAPI(lifespan=lifespan)
 
 
 async def get_session() -> AsyncSession:
-    if async_engine is None:
-        raise RuntimeError("Database engine is not initialized.")
-    async with AsyncSession(async_engine, expire_on_commit=False) as session:
+    engine = await initialize_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
 
 
