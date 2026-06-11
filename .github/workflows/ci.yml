@@ -27,4 +27,4 @@ jobs:
 
       - name: Execute Async Matrix Calculus Suite
         run: |
-          pytest test_app.py -v 
+          pytest test_app.py -v
