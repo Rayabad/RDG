@@ -1,0 +1,71 @@
+name: Grok Assistant
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'What do you want Grok to do?'
+        required: true
+        default: 'Review the current state of the codebase and suggest improvements'
+      model:
+        description: 'Model to use'
+        required: true
+        default: 'grok-4.3'
+        type: choice
+        options:
+          - grok-4.3
+          - grok-build-0.1
+
+jobs:
+  ask-grok:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install openai
+
+      - name: Ask Grok
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          python3 << 'EOF'
+          import os
+          from openai import OpenAI
+
+          client = OpenAI(
+              api_key=os.environ["XAI_API_KEY"],
+              base_url="https://api.x.ai/v1"
+          )
+
+          # Read key files
+          files_content = ""
+          for filepath in ["app.py", "test_app.py", "README.md"]:
+              try:
+                  with open(filepath, "r") as f:
+                      files_content += f"\n\n=== {filepath} ===\n{f.read()}"
+              except:
+                  pass
+
+          prompt = """${{ github.event.inputs.prompt }}"""
+
+          response = client.chat.completions.create(
+              model="${{ github.event.inputs.model }}",
+              messages=[
+                  {"role": "system", "content": "You are a senior software engineer helping improve this codebase."},
+                  {"role": "user", "content": f"{prompt}\n\nHere is the current codebase:\n{files_content}"}
+              ],
+              max_tokens=2000
+          )
+
+          print(response.choices[0].message.content)
+          EOF
